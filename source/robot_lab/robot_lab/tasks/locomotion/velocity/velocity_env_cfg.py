@@ -12,6 +12,7 @@ import sys
 from dataclasses import MISSING
 
 import isaaclab.sim as sim_utils
+from isaaclab.envs import ViewerCfg
 from isaaclab.assets import ArticulationCfg, AssetBaseCfg
 from isaaclab.envs import ManagerBasedRLEnvCfg
 from isaaclab.managers import CurriculumTermCfg as CurrTerm
@@ -33,7 +34,7 @@ import robot_lab.tasks.locomotion.velocity.mdp as mdp
 ##
 # Pre-defined configs
 ##
-from isaaclab.terrains.config.rough import ROUGH_TERRAINS_CFG  # isort: skip
+from isaaclab.terrains.config.stone import COBBLESTONE_ROAD_CFG  # isort: skip
 
 
 ##
@@ -49,7 +50,7 @@ class MySceneCfg(InteractiveSceneCfg):
     terrain = TerrainImporterCfg(
         prim_path="/World/ground",
         terrain_type="generator",
-        terrain_generator=ROUGH_TERRAINS_CFG,
+        terrain_generator=COBBLESTONE_ROAD_CFG,
         max_init_terrain_level=5,
         collision_group=-1,
         physics_material=sim_utils.RigidBodyMaterialCfg(
@@ -58,8 +59,8 @@ class MySceneCfg(InteractiveSceneCfg):
             static_friction=1.0,
             dynamic_friction=1.0,
         ),
-        visual_material=sim_utils.MdlFileCfg(
-            mdl_path=f"{ISAACLAB_NUCLEUS_DIR}/Materials/TilesMarbleSpiderWhiteBrickBondHoned/TilesMarbleSpiderWhiteBrickBondHoned.mdl",
+         visual_material=sim_utils.MdlFileCfg(
+            mdl_path=f"/home/tim/Isaac/textures/TilesMarbleSpiderWhiteBrickBondHoned/TilesMarbleSpiderWhiteBrickBondHoned.mdl",
             project_uvw=True,
             texture_scale=(0.25, 0.25),
         ),
@@ -90,7 +91,7 @@ class MySceneCfg(InteractiveSceneCfg):
         prim_path="/World/skyLight",
         spawn=sim_utils.DomeLightCfg(
             intensity=750.0,
-            texture_file=f"{ISAAC_NUCLEUS_DIR}/Materials/Textures/Skies/PolyHaven/kloofendal_43d_clear_puresky_4k.hdr",
+            texture_file=f"/home/tim/Isaac/textures/PolyHaven/kloofendal_43d_clear_puresky_4k.hdr",
         ),
     )
 
@@ -373,9 +374,17 @@ class RewardsCfg:
     # General
     is_terminated = RewTerm(func=mdp.is_terminated, weight=0.0)
 
-    # Root penalties
-    lin_vel_z_l2 = RewTerm(func=mdp.lin_vel_z_l2, weight=0.0)
-    ang_vel_xy_l2 = RewTerm(func=mdp.ang_vel_xy_l2, weight=0.0)
+    base_angular_velocity = RewTerm(
+        func=mdp.base_angular_velocity_reward,
+        weight=0.0,
+        params={"std": 2.0, "asset_cfg": SceneEntityCfg("robot")},
+    )
+    base_linear_velocity = RewTerm(
+        func=mdp.base_linear_velocity_reward,
+        weight=0.0,
+        params={"std": 1.0, "ramp_rate": 0.5, "ramp_at_vel": 1.0, "asset_cfg": SceneEntityCfg("robot")},
+    )
+
     flat_orientation_l2 = RewTerm(func=mdp.flat_orientation_l2, weight=0.0)
     base_height_l2 = RewTerm(
         func=mdp.base_height_l2,
@@ -543,11 +552,9 @@ class RewardsCfg:
         func=mdp.GaitReward,
         weight=0.0,
         params={
-            "std": math.sqrt(0.5),
-            "command_name": "base_velocity",
+            "std": 0.1,
             "max_err": 0.2,
             "velocity_threshold": 0.5,
-            "command_threshold": 0.1,
             "synced_feet_pair_names": (("", ""), ("", "")),
             "asset_cfg": SceneEntityCfg("robot"),
             "sensor_cfg": SceneEntityCfg("contact_forces"),
@@ -635,6 +642,7 @@ class RewardsCfg:
 
     upward = RewTerm(func=mdp.upward, weight=0.0)
 
+    action_smoothness = RewTerm(func=mdp.action_smoothness_penalty, weight=-1.0)
 
 @configclass
 class TerminationsCfg:
@@ -691,6 +699,9 @@ class LocomotionVelocityRoughEnvCfg(ManagerBasedRLEnvCfg):
     terminations: TerminationsCfg = TerminationsCfg()
     events: EventCfg = EventCfg()
     curriculum: CurriculumCfg = CurriculumCfg()
+
+    # Viewer
+    viewer = ViewerCfg(eye=(10.5, 10.5, 0.3), origin_type="world", env_index=0, asset_name="robot")
 
     def __post_init__(self):
         """Post initialization."""

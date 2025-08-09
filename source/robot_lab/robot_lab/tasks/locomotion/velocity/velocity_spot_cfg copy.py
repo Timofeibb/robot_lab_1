@@ -24,7 +24,6 @@ from isaaclab.sensors import ContactSensorCfg, RayCasterCfg, patterns
 from isaaclab.terrains import TerrainImporterCfg
 from isaaclab.utils import configclass
 from isaaclab.utils.noise import AdditiveUniformNoiseCfg as Unoise
-from isaaclab.utils.assets import ISAAC_NUCLEUS_DIR, ISAACLAB_NUCLEUS_DIR
 
 import robot_lab.tasks.locomotion.velocity.mdp as mdp
 
@@ -105,7 +104,7 @@ class CommandsCfg:
     base_velocity = mdp.UniformThresholdVelocityCommandCfg(
         asset_name="robot",
         resampling_time_range=(10.0, 10.0),
-        rel_standing_envs=0.15,
+        rel_standing_envs=0.1,
         rel_heading_envs=1.0,
         heading_command=True,
         heading_control_stiffness=0.5,
@@ -247,6 +246,7 @@ class ObservationsCfg:
     policy: PolicyCfg = PolicyCfg()
     critic: CriticCfg = CriticCfg()
 
+
 @configclass
 class EventCfg:
     """Configuration for events."""
@@ -280,8 +280,8 @@ class EventCfg:
         mode="reset",
         params={
             "asset_cfg": SceneEntityCfg("robot", body_names="base"),
-            "force_range": (-10.0, 10.0),
-            "torque_range": (-10.0, 10.0),
+            "force_range": (0.0, 0.0),
+            "torque_range": (-0.0, 0.0),
         },
     )
 
@@ -292,7 +292,7 @@ class EventCfg:
             "asset_cfg": SceneEntityCfg("robot"),
             "pose_range": {"x": (-0.5, 0.5), "y": (-0.5, 0.5), "yaw": (-3.14, 3.14)},
             "velocity_range": {
-                "x": (-1.0, 1.0),
+                "x": (-1.5, 1.5),
                 "y": (-1.0, 1.0),
                 "z": (-0.5, 0.5),
                 "roll": (-0.7, 0.7),
@@ -347,7 +347,7 @@ class RewardsCfg:
     )
     base_linear_velocity = RewTerm(
         func=mdp.base_linear_velocity_reward,
-        weight=5.0,
+        weight=10.0,
         params={"std": 1.0, "ramp_rate": 0.5, "ramp_at_vel": 1.0, "asset_cfg": SceneEntityCfg("robot")},
     )
     foot_clearance = RewTerm(
@@ -398,32 +398,42 @@ class RewardsCfg:
         },
     )
     
-    # undesired_contacts_base = RewTerm(
-    #     func=mdp.undesired_contacts,
-    #     weight=-5.0,
-    #     params={
-    #         "sensor_cfg": SceneEntityCfg("contact_forces", body_names="base"),
-    #         "threshold": 1.0,
-    #     },
-    # )
+    undesired_contacts_base = RewTerm(
+        func=mdp.undesired_contacts,
+        weight=-5.0,
+        params={
+            "sensor_cfg": SceneEntityCfg("contact_forces", body_names="base"),
+            "threshold": 1.0,
+        },
+    )
     
-    # undesired_contacts_upper = RewTerm(
-    #     func=mdp.undesired_contacts,
-    #     weight=-2.0,
-    #     params={
-    #         "sensor_cfg": SceneEntityCfg("contact_forces", body_names=".*_thigh"),
-    #         "threshold": 1.0,
-    #     },
-    # )
+    undesired_contacts_upper = RewTerm(
+        func=mdp.undesired_contacts,
+        weight=-2.0,
+        params={
+            "sensor_cfg": SceneEntityCfg("contact_forces", body_names=".*_thigh"),
+            "threshold": 1.0,
+        },
+    )
         
-    # undesired_contacts_lower = RewTerm(
-    #     func=mdp.undesired_contacts,
-    #     weight=-1.0,
-    #     params={
-    #         "sensor_cfg": SceneEntityCfg("contact_forces", body_names=".*_calf"),
-    #         "threshold": 1.0,
-    #     },
-    # )
+    undesired_contacts_lower = RewTerm(
+        func=mdp.undesired_contacts,
+        weight=-0.5,
+        params={
+            "sensor_cfg": SceneEntityCfg("contact_forces", body_names=".*_calf"),
+            "threshold": 1.0,
+        },
+    )
+
+    stand_still_without_cmd = RewTerm(
+        func=mdp.stand_still_without_cmd,
+        weight=-5.0,
+        params={
+            "command_name": "base_velocity",
+            "command_threshold": 0.1,
+            "asset_cfg": SceneEntityCfg("robot", joint_names=".*"),
+        },
+    )
         
     joint_acc = RewTerm(
         func=mdp.joint_acceleration_penalty,
@@ -471,18 +481,29 @@ class RewardsCfg:
 class TerminationsCfg:
     """Termination terms for the MDP."""
 
+    # MDP terminations
     time_out = DoneTerm(func=mdp.time_out, time_out=True)
-
-    body_contact = DoneTerm(
-        func=mdp.illegal_contact,
-        params={"sensor_cfg": SceneEntityCfg("contact_forces", body_names=["base", ".*_thigh", ".*_calf"]), "threshold": 1.0},
-    )
-    
+    # command_resample
     terrain_out_of_bounds = DoneTerm(
         func=mdp.terrain_out_of_bounds,
         params={"asset_cfg": SceneEntityCfg("robot"), "distance_buffer": 3.0},
         time_out=True,
-    )    
+    )
+
+
+@configclass
+class TerminationsCfg:
+    """Termination terms for the MDP."""
+
+    # MDP terminations
+    time_out = DoneTerm(func=mdp.time_out, time_out=True)
+    # command_resample
+    terrain_out_of_bounds = DoneTerm(
+        func=mdp.terrain_out_of_bounds,
+        params={"asset_cfg": SceneEntityCfg("robot"), "distance_buffer": 3.0},
+        time_out=True,
+    )
+
 
 @configclass
 class CurriculumCfg:
